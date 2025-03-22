@@ -1,6 +1,12 @@
 name: Publish Python distributions to PyPI and TestPyPI
 on:
   workflow_dispatch:
+
+# Add this permissions block at the top level
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
     python-build-n-publish:
         name: Build and publish Python distribution
