@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="cloudquicklabs1",
+    name="anythingoes",
     version="0.0.4",
-    author="Rekhu Chinnarathod",
-    author_email="vrchinnarathod@gmail.com",
+    author="Gautam",
+    author_email="gautamsr101@gmail.com",
     url="https://www.youtube.com/channel/UCv9MUffHWyo2GgLIDLVu0KQ",
     description="An application that informs you of the time in different locations and timezones",
     packages=find_packages(),
