@@ -6,9 +6,12 @@ jobs:
     name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Added this line to enable OIDC token generation
+      contents: read      # This allows the job to clone the repo
+      id-token: write     # This is needed for trusted publishing to PyPI
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4  # Updated to v4 for better compatibility
+      with:
+        fetch-depth: 0    # Fetch all history for proper versioning
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
