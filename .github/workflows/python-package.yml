@@ -1,36 +1,39 @@
 name: release
 
 on:
-  release:
-    types: [published, created]
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Release type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - beta
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        type: string
 
 jobs:
   details:
     runs-on: ubuntu-latest
     outputs:
       package_name: ${{ steps.package_information.outputs.package_name }}
-      new_version: ${{ steps.release.outputs.new_version }}
-      suffix: ${{ steps.release.outputs.suffix }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      new_version: ${{ inputs.version }}
+      suffix: ${{ inputs.version_type }}
+      tag_name: ${{ inputs.version }}-${{ inputs.version_type }}
     steps:
       - uses: actions/checkout@v2
-      - name: Extract tag and Details
-        id: release
+      - name: Create tag
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-            NEW_VERSION=$(echo $TAG_NAME | awk -F'-' '{print $1}')
-            SUFFIX=$(echo $TAG_NAME | awk -F'-' '{print $2}')
-            echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-            echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
-            echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-            echo "Version is $NEW_VERSION"
-            echo "Suffix is $SUFFIX"
-            echo "Tag name is $TAG_NAME"
-          else
-            echo "No tag found"
-            exit 1
-          fi
+          TAG_NAME=${{ inputs.version }}-${{ inputs.version_type }}
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+          echo "Created and pushed tag: $TAG_NAME"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -94,7 +97,7 @@ jobs:
           git config user.email "actions@github.com"
           git checkout -b version-bump-${{ needs.details.outputs.new_version }}
           git add pyproject.toml
-          git commit -m "Bump version to $VERSION"
+          git commit -m "Bump version to ${{ needs.details.outputs.new_version }}"
           git push origin version-bump-${{ needs.details.outputs.new_version }}
 
       - name: Create Pull Request
@@ -120,12 +123,11 @@ jobs:
 
   pypi_publish:
     name: Upload release to PyPI
-    needs: [setup_and_build, details]
+    needs: [setup_and_build, details, check_pypi]
     runs-on: ubuntu-latest
     environment:
       name: release
     permissions:
-      # In order to use Trusted Publisher
       id-token: write
       contents: read
 
@@ -139,15 +141,4 @@ jobs:
       - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-          cache: "poetry"
-
-      - name: Publish the package with poetry
-        run: |
-          poetry publish -u __token__ -p '${{ secrets.PYPI_API_TOKEN }}'
