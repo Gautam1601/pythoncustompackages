@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          fetch-depth: 0  # Fetch all history for tags
+          fetch-depth: 0
 
       - name: Create tag
         run: |
@@ -58,52 +58,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Initialize Poetry if needed
-        if: inputs.package_manager == 'poetry'
-        run: |
-          pip install poetry
-          if [ ! -f "pyproject.toml" ]; then
-            echo "No pyproject.toml found, initializing Poetry"
-            poetry init --no-interaction --name="${{ github.repository#*/}}" --author="GitHub Actions <actions@github.com>" --dependency python="^3.9"
-          fi
-          
-          if [ ! -f "poetry.lock" ]; then
-            echo "No poetry.lock found, creating it"
-            poetry lock
-          fi
+      - name: Install Poetry
+        if: ${{ inputs.package_manager == 'poetry' }}
+        run: pip install poetry
 
       - name: Get Package Name (Poetry)
         id: package_information_poetry
-        if: inputs.package_manager == 'poetry'
+        if: ${{ inputs.package_manager == 'poetry' }}
         run: |
           package_information=$(poetry version)
           PACKAGE_NAME=$(echo $package_information | awk '{print $1}')
-          echo "Package name: $PACKAGE_NAME"
           echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Get Package Name (Setuptools)
         id: package_information_setuptools
-        if: inputs.package_manager == 'setuptools'
+        if: ${{ inputs.package_manager == 'setuptools' }}
         run: |
           if [ -f "setup.py" ]; then
             PACKAGE_NAME=$(python -c "import ast; print(ast.literal_eval(open('setup.py').read().split('name=')[1].split(',')[0].strip()))")
           elif [ -f "setup.cfg" ]; then
             PACKAGE_NAME=$(python -c "import configparser; config = configparser.ConfigParser(); config.read('setup.cfg'); print(config['metadata']['name'])")
           else
-            # Extract package name from directory name
             PACKAGE_NAME="${{ github.repository#*/}}"
           fi
-          echo "Package name: $PACKAGE_NAME"
           echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Set package name output
-        id: package_information
-        run: |
-          if [ "${{ inputs.package_manager }}" == "poetry" ]; then
-            echo "package_name=${{ steps.package_information_poetry.outputs.package_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "package_name=${{ steps.package_information_setuptools.outputs.package_name }}" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Set package name output (Poetry)
+        if: ${{ inputs.package_manager == 'poetry' }}
+        run: echo "package_name=${{ steps.package_information_poetry.outputs.package_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set package name output (Setuptools)
+        if: ${{ inputs.package_manager == 'setuptools' }}
+        run: echo "package_name=${{ steps.package_information_setuptools.outputs.package_name }}" >> "$GITHUB_OUTPUT"
 
   check_pypi:
     needs: details
@@ -111,14 +97,12 @@ jobs:
     steps:
       - name: Fetch information from PyPI
         run: |
-          PACKAGE_NAME=${{ needs.details.outputs.package_name}}
+          PACKAGE_NAME=${{ needs.details.outputs.package_name }}
           response=$(curl -s https://pypi.org/pypi/$PACKAGE_NAME/json || echo "{}")
           latest_previous_version=$(echo $response | grep -oP '"releases":\{"\K[^"]+' | sort -rV | head -n 1)
           if [ -z "$latest_previous_version" ]; then
-            echo "Package not found on PyPI."
             latest_previous_version="0.0.0"
           fi
-          echo "Latest version on PyPI: $latest_previous_version"
           echo "latest_previous_version=$latest_previous_version" >> $GITHUB_ENV
 
       - name: Compare versions and exit if not newer
@@ -128,8 +112,6 @@ jobs:
           if [ "$(printf '%s\n' "$LATEST_VERSION" "$NEW_VERSION" | sort -rV | head -n 1)" != "$NEW_VERSION" ] || [ "$NEW_VERSION" == "$LATEST_VERSION" ]; then
             echo "The new version $NEW_VERSION is not greater than the latest version $LATEST_VERSION on PyPI."
             exit 1
-          else
-            echo "The new version $NEW_VERSION is greater than the latest version $LATEST_VERSION on PyPI."
           fi
 
   setup_and_build:
@@ -143,36 +125,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Initialize Poetry if needed
-        if: needs.details.outputs.package_manager == 'poetry'
-        run: |
-          pip install poetry
-          if [ ! -f "pyproject.toml" ]; then
-            echo "No pyproject.toml found, initializing Poetry"
-            poetry init --no-interaction --name="${{ github.repository#*/}}" --author="GitHub Actions <actions@github.com>" --dependency python="^3.9"
-          fi
-          
-          if [ ! -f "poetry.lock" ]; then
-            echo "No poetry.lock found, creating it"
-            poetry lock
-          fi
+      - name: Install Poetry
+        if: ${{ needs.details.outputs.package_manager == 'poetry' }}
+        run: pip install poetry
 
       - name: Set version (Poetry)
-        if: needs.details.outputs.package_manager == 'poetry'
+        if: ${{ needs.details.outputs.package_manager == 'poetry' }}
         run: poetry version ${{ needs.details.outputs.new_version }}
 
       - name: Set version (Setuptools)
-        if: needs.details.outputs.package_manager == 'setuptools'
+        if: ${{ needs.details.outputs.package_manager == 'setuptools' }}
         run: |
           if [ -f "setup.py" ]; then
-            # For setup.py, use sed to update version
             sed -i "s/version=['\"]\(.*\)['\"],/version='${{ needs.details.outputs.new_version }}',/" setup.py
           elif [ -f "setup.cfg" ]; then
-            # For setup.cfg, use configparser
-            python -c "import configparser; config = configparser.ConfigParser(); config.read('setup.cfg'); config['metadata']['version'] = '${{ needs.details.outputs.new_version }}'; f = open('setup.cfg', 'w'); config.write(f); f.close()"
+            python -c "import configparser; config = configparser.ConfigParser(); config.read('setup.cfg'); config['metadata']['version'] = '${{ needs.details.outputs.new_version }}'; with open('setup.cfg', 'w') as f: config.write(f)"
           else
-            echo "No setup.py or setup.cfg found. Creating setup.py"
-            cat > setup.py << 'EOF'
+            cat > setup.py << EOF
 from setuptools import setup, find_packages
 
 setup(
@@ -183,7 +152,7 @@ setup(
 EOF
           fi
 
-      - name: Bump version in files
+      - name: Create version bump PR
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -205,21 +174,21 @@ EOF
           labels: "version-bump"
 
       - name: Install dependencies (Poetry)
-        if: needs.details.outputs.package_manager == 'poetry'
-        run: poetry install || poetry install --no-interaction
+        if: ${{ needs.details.outputs.package_manager == 'poetry' }}
+        run: poetry install --no-interaction
 
       - name: Install dependencies (Setuptools)
-        if: needs.details.outputs.package_manager == 'setuptools'
+        if: ${{ needs.details.outputs.package_manager == 'setuptools' }}
         run: |
           pip install -e .
           pip install build wheel
 
       - name: Build package (Poetry)
-        if: needs.details.outputs.package_manager == 'poetry'
+        if: ${{ needs.details.outputs.package_manager == 'poetry' }}
         run: poetry build
 
       - name: Build package (Setuptools)
-        if: needs.details.outputs.package_manager == 'setuptools'
+        if: ${{ needs.details.outputs.package_manager == 'setuptools' }}
         run: python -m build
 
       - name: Upload artifacts
