@@ -11,7 +11,6 @@ on:
 env:
   PACKAGE_NAME: "pythoncustompackages"
   OWNER: "Gautam1601"
-  TAP_NAME: "<TAP_NAME>"
 
 jobs:
   details:
