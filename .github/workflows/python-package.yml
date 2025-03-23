@@ -16,6 +16,12 @@ on:
         required: true
         type: string
 
+# Add top-level permissions
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
 jobs:
   details:
     runs-on: ubuntu-latest
@@ -26,6 +32,9 @@ jobs:
       tag_name: ${{ inputs.version }}-${{ inputs.version_type }}
     steps:
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch all history for tags
+
       - name: Create tag
         run: |
           TAG_NAME=${{ inputs.version }}-${{ inputs.version_type }}
@@ -127,9 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - name: Download artifacts
