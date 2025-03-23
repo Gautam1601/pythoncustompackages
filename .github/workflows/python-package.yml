@@ -159,8 +159,7 @@ jobs:
 
       - name: Set version (Poetry)
         if: needs.details.outputs.package_manager == 'poetry'
-        run: |
-          poetry version ${{ needs.details.outputs.new_version }}
+        run: poetry version ${{ needs.details.outputs.new_version }}
 
       - name: Set version (Setuptools)
         if: needs.details.outputs.package_manager == 'setuptools'
@@ -173,14 +172,15 @@ jobs:
             python -c "import configparser; config = configparser.ConfigParser(); config.read('setup.cfg'); config['metadata']['version'] = '${{ needs.details.outputs.new_version }}'; f = open('setup.cfg', 'w'); config.write(f); f.close()"
           else
             echo "No setup.py or setup.cfg found. Creating setup.py"
-            echo "from setuptools import setup, find_packages
+            cat > setup.py << 'EOF'
+from setuptools import setup, find_packages
 
 setup(
     name='${{ needs.details.outputs.package_name }}',
     version='${{ needs.details.outputs.new_version }}',
     packages=find_packages(),
 )
-" > setup.py
+EOF
           fi
 
       - name: Bump version in files
@@ -206,8 +206,7 @@ setup(
 
       - name: Install dependencies (Poetry)
         if: needs.details.outputs.package_manager == 'poetry'
-        run: |
-          poetry install || poetry install --no-interaction
+        run: poetry install || poetry install --no-interaction
 
       - name: Install dependencies (Setuptools)
         if: needs.details.outputs.package_manager == 'setuptools'
@@ -217,13 +216,11 @@ setup(
 
       - name: Build package (Poetry)
         if: needs.details.outputs.package_manager == 'poetry'
-        run: |
-          poetry build
+        run: poetry build
 
       - name: Build package (Setuptools)
         if: needs.details.outputs.package_manager == 'setuptools'
-        run: |
-          python -m build
+        run: python -m build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
